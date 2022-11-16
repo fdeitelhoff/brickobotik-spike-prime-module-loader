@@ -12,19 +12,18 @@
   <FormKit type="form" :actions="false">
     <h1>brickobotik Module Library</h1>
     <p>
-      Install the brickobotik Spike Prime module library to use our sensors.
-      Just klick on "Connect Spike Prime..." and select your connected Spike
-      Prime. Afterwards, click "Transfer Module...", and wait until the process
-      is completed. The Spike Prime hub reboots itself after the install is
-      done.
+      Install the brickobotik module library for the LEGO® Education SPIKE™
+      Prime to use our sensors.
+    </p>
+    <p>
+      Just click on "Connect...", and select the available LEGO® Education
+      SPIKE™ Prime. Afterwards, click "Transfer Module...", and wait until the
+      process is completed. The LEGO® Education SPIKE™ Prime Hub reboots itself
+      after the installation is done.
     </p>
     <div class="row">
       <div class="column">
-        <FormKit
-          type="button"
-          label="Connect Spike Prime..."
-          @click="onRequestPort"
-        />
+        <FormKit type="button" label="Connect..." @click="onRequestPort" />
       </div>
       <div class="column">
         <FormKit
@@ -34,7 +33,31 @@
         />
       </div>
     </div>
+    <div class="row-without-border">
+      <div class="column">
+        <p v-if="isConnecting">Connecting to the Hub...</p>
+        <p v-if="isConnected">The Hub is connected!</p>
+        <div v-if="isTransfering">
+          <p>The transfer is in progress...</p>
+          <progress
+            id="module-transfer"
+            :value="currentTransferStep"
+            :max="maxTransferSteps"
+          />
+        </div>
+      </div>
+    </div>
   </FormKit>
+  <div>
+    Interested in our sensors? Visit our
+    <a href="https://www.brickobotik.shop" target="_blank">store</a>!
+  </div>
+  <div>
+    <p>
+      &copy; 2022
+      <a href="https://www.brickobotik.de" target="_blank">brickobotik OHG</a>
+    </p>
+  </div>
   <!-- <button @click="onReadModule">Read Module</button> -->
   <!-- <button @click="onReading">Read</button> -->
   <!-- <button @click="onStop">Stop</button> -->
@@ -50,6 +73,10 @@ const isSerialActive = ref(false);
 const isSerialFound = ref(false);
 const isConnected = ref(false);
 const port: any = ref({});
+const isConnecting = ref(false);
+const isTransfering = ref(false);
+const maxTransferSteps = ref(0);
+const currentTransferStep = ref(0);
 
 onMounted(() => {
   isSerialActive.value = 'serial' in navigator;
@@ -57,12 +84,15 @@ onMounted(() => {
 
 async function onRequestPort() {
   // Device ID                : USB\VID_0694&PID_0009\205F31754252
-  const filters = [{ usbVendorId: 0x1684, usbProductId: 0x0009 }]; // ???
+  const filters = [{ usbVendorId: 0x0694, usbProductId: 0x0009 }]; // ???
 
-  port.value = await nav.serial.requestPort(filters);
+  port.value = await nav.serial.requestPort({ filters });
   isSerialFound.value = port.value !== undefined;
   // port.value.onconnect = onConnect();
   // port.value.ondisconnect = onDisconnect();
+
+  isConnecting.value = true;
+  isConnected.value = false;
 
   await port.value.open({
     baudRate: 115200,
@@ -93,6 +123,9 @@ async function onRequestPort() {
 }
 
 async function onReading() {
+  isConnecting.value = false;
+  isConnected.value = true;
+
   while (port.value.readable) {
     try {
       const textDecoder = new TextDecoderStream();
@@ -277,34 +310,7 @@ async function onSendBrickobotikModule() {
   //     _port.WriteLine($"{text}\r");
   // }
 
-  var enc = new TextEncoder();
-  // var dec = new TextDecoder();
-
-  const writer = port.value.writable.getWriter();
-
-  await enterRawRepl(writer);
-
-  await writer.write(enc.encode('import sys\nimport ubinascii\n'));
-  console.log('import sys\nimport ubinascii');
-
-  await writer.write(enc.encode('from ubinascii import hexlify, a2b_base64\n'));
-  console.log('from ubinascii import hexlify, a2b_base64');
-
-  await writer.write(enc.encode('import hub\n'));
-  console.log('import hub');
-
-  await writer.write(enc.encode("f = open('brickobotik.py', 'wb')\n"));
-  console.log("f = open('brickobotik.py', 'wb')\n");
-
-  var module = 'def printVersion():\n';
-  module += "    print('Brickobotik Spike Prime API Version 0.2.0')\n\n";
-
-  module += 'def greet():\n';
-  module += "    print('hallo brickobotik')";
-
-  console.log('on send brickobotik module'); // , module);
-
-  // var bytes = enc.encode(module.trim());
+  isTransfering.value = true;
 
   const modules_base64 = [
     'ZnJvbSBodWIgaW1wb3J0IHBvcnQKZnJvbSBtYXRoIGltcG9ydCAqCmZyb20gdXRpbWUgaW1wb3J0IHNsZWVwX21zCmRlZiBfYm91bmRzKG1pbl8sIHZhbF8sIG1heF8pOgogICAgcmV0dXJuIG1pbihtYXgobWluXywgdmFsXyksIG1heF8pCmRlZiBfY2hlY2tfcGVyY2VudGFnZShicmlnaHRuZXNzOiBpbnQpIC0+IGludDoKICAgIGlmIG5vdCBpc2luc3RhbmNlKGJyaWdodG5lc3MsIGludCk6CiAgICAgICAgcmFpc2UgVHlwZUVycm9yCg==',
@@ -338,6 +344,38 @@ async function onSendBrickobotikModule() {
     'ICAgICAgICAgICAgICAgIGJ5dGVfID0gaW50LmZyb21fYnl0ZXMoc2VsZi5fcG9ydC5yZWFkKDEpLCAiYmlnIikKICAgICAgICAgICAgYnl0ZXNfLmFwcGVuZChieXRlXykKICAgICAgICByZXR1cm4gYnl0ZXNfCnByaW50KCdUaGUgYnJpY2tvYm90aWsgbGlicmFyeSB3YXMgc3VjY2Vzc2Z1bGx5IGltcG9ydGVkIScpCg==',
   ];
 
+  console.log('on send brickobotik module', modules_base64.length);
+  maxTransferSteps.value = modules_base64.length;
+
+  var enc = new TextEncoder();
+  // var dec = new TextDecoder();
+
+  const writer = port.value.writable.getWriter();
+
+  await enterRawRepl(writer);
+
+  await writer.write(enc.encode('import sys\nimport ubinascii\n'));
+  console.log('import sys\nimport ubinascii');
+
+  await writer.write(enc.encode('from ubinascii import hexlify, a2b_base64\n'));
+  console.log('from ubinascii import hexlify, a2b_base64');
+
+  await writer.write(enc.encode('import hub\n'));
+  console.log('import hub');
+
+  await writer.write(enc.encode("f = open('brickobotik.py', 'wb')\n"));
+  console.log("f = open('brickobotik.py', 'wb')\n");
+
+  var module = 'def printVersion():\n';
+  module += "    print('Brickobotik Spike Prime API Version 0.2.0')\n\n";
+
+  module += 'def greet():\n';
+  module += "    print('hallo brickobotik')";
+
+  console.log('on send brickobotik module'); // , module);
+
+  // var bytes = enc.encode(module.trim());
+
   // const module_base64 =
   // 'ZnJvbSBodWIgaW1wb3J0IHBvcnQKZnJvbSBtYXRoIGltcG9ydCAqCmZyb20gdXRpbWUgaW1wb3J0IHNsZWVwX21zCmRlZiBfYm91bmRzKG1pbl8sIHZhbF8sIG1heF8pOgogICAgcmV0dXJuIG1pbihtYXgobWluXywgdmFsXyksIG1heF8pCmRlZiBfY2hlY2tfcGVyY2VudGFnZShicmlnaHRuZXNzOiBpbnQpIC0+IGludDoKICAgIGlmIG5vdCBpc2luc3RhbmNlKGJyaWdodG5lc3MsIGludCk6CiAgICAgICAgcmFpc2UgVHlwZUVycm9yCiAgICBicmlnaHRuZXNzID0gYWJzKGJyaWdodG5lc3MpCiAgICByZXR1cm4gbWluKGJyaWdodG5lc3MsIDEwMCkKZGVmIF9jaGVja19udW0oKm9ianMpOgogICAgZm9yIG9iaiBpbiBvYmpzOgogICAgICAgIGlmIG5vdCBpc2luc3RhbmNlKG9iaiwgaW50KSBhbmQgbm90IGlzaW5zdGFuY2Uob2JqLCBmbG9hdCk6CiAgICAgICAgICAgIHJhaXNlIFR5cGVFcnJvcgpjbGFzcyBfU0FEZXZpY2U6CiAgICBkZWYgX19pbml0X18oc2VsZiwgcG9ydG5hbWUpOgogICAgICAgIGlmIGlzaW5zdGFuY2UocG9ydG5hbWUsIF9TQURldmljZSk6CiAgICAgICAgICAgIHNlbGYuX3BvcnQgPSBwb3J0bmFtZS5fcG9ydAogICAgICAgIGVsaWYgcG9ydG5hbWUgPT0gIkEiOgogICAgICAgICAgICBzZWxmLl9wb3J0ID0gcG9ydC5BCiAgICAgICAgZWxpZiBwb3J0bmFtZSA9PSAiQiI6CiAgICAgICAgICAgIHNlbGYuX3BvcnQgPSBwb3J0LkIKICAgICAgICBlbGlmIHBvcnRuYW1lID09ICJDIjoKICAgICAgICAgICAgc2VsZi5fcG9ydCA9IHBvcnQuQwogICAgICAgIGVsaWYgcG9ydG5hbWUgPT0gIkQiOgogICAgICAgICAgICBzZWxmLl9wb3J0ID0gcG9ydC5ECiAgICAgICAgZWxpZiBwb3J0bmFtZSA9PSAiRSI6CiAgICAgICAgICAgIHNlbGYuX3BvcnQgPSBwb3J0LkUKICAgICAgICBlbGlmIHBvcnRuYW1lID09ICJGIjoKICAgICAgICAgICAgc2VsZi5fcG9ydCA9IHBvcnQuRgogICAgICAgIGVsaWYgcG9ydG5hbWUgaXMgc3RyOgogICAgICAgICAgICAgICAgcmFpc2UgVmFsdWVFcnJvcihwb3J0bmFtZSArICIgaXMgbm90IGEgdmFsaWQgcG9ydCBuYW1lLiIpCiAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgIHJhaXNlIFR5cGVFcnJvcigiVGhlIHBvcnRuYW1lICIgKyBzdHIocG9ydG5hbWUpICsgIiBpcyBub3QgYSBzdHJpbmcuIikK';
   // 'ZnJvbSBodWIgaW1wb3J0IHBvcnQKZnJvbSBtYXRoIGltcG9ydCAqCmZyb20gdXRpbWUgaW1wb3J0IHNsZWVwX21zCmRlZiBfYm91bmRzKG1pbl8sIHZhbF8sIG1heF8pOgogICAgcmV0dXJuIG1pbihtYXgobWluXywgdmFsXyksIG1heF8pCmRlZiBfY2hlY2tfcGVyY2VudGFnZShicmlnaHRuZXNzOiBpbnQpIC0+IGludDoKICAgIGlmIG5vdCBpc2luc3RhbmNlKGJyaWdodG5lc3MsIGludCk6CiAgICAgICAgcmFpc2UgVHlwZUVycm9yCiAgICBicmlnaHRuZXNzID0gYWJzKGJyaWdodG5lc3MpCiAgICByZXR1cm4gbWluKGJyaWdodG5lc3MsIDEwMCkKZGVmIF9jaGVja19udW0oKm9ianMpOgogICAgZm9yIG9iaiBpbiBvYmpzOgogICAgICAgIGlmIG5vdCBpc2luc3RhbmNlKG9iaiwgaW50KSBhbmQgbm90IGlzaW5zdGFuY2Uob2JqLCBmbG9hdCk6CiAgICAgICAgICAgIHJhaXNlIFR5cGVFcnJvcgpjbGFzcyBfU0FEZXZpY2U6CiAgICBkZWYgX19pbml0X18oc2VsZiwgcG9ydG5hbWUpOgogICAgICAgIGlmIGlzaW5zdGFuY2UocG9ydG5hbWUsIF9TQURldmljZSk6CiAgICAgICAgICAgIHNlbGYuX3BvcnQgPSBwb3J0bmFtZS5fcG9ydAogICAgICAgIGVsaWYgcG9ydG5hbWUgPT0gIkEiOgogICAgICAgICAgICBzZWxmLl9wb3J0ID0gcG9ydC5BCiAgICAgICAgZWxpZiBwb3J0bmFtZSA9PSAiQiI6CiAgICAgICAgICAgIHNlbGYuX3BvcnQgPSBwb3J0LkIKICAgICAgICBlbGlmIHBvcnRuYW1lID09ICJDIjoKICAgICAgICAgICAgc2VsZi5fcG9ydCA9IHBvcnQuQwogICAgICAgIGVsaWYgcG9ydG5hbWUgPT0gIkQiOgogICAgICAgICAgICBzZWxmLl9wb3J0ID0gcG9ydC5ECiAgICAgICAgZWxpZiBwb3J0bmFtZSA9PSAiRSI6CiAgICAgICAgICAgIHNlbGYuX3BvcnQgPSBwb3J0LkUKICAgICAgICBlbGlmIHBvcnRuYW1lID09ICJGIjoKICAgICAgICAgICAgc2VsZi5fcG9ydCA9IHBvcnQuRgogICAgICAgIGVsaWYgcG9ydG5hbWUgaXMgc3RyOgogICAgICAgICAgICAgICAgcmFpc2UgVmFsdWVFcnJvcihwb3J0bmFtZSArICIgaXMgbm90IGEgdmFsaWQgcG9ydCBuYW1lLiIpCiAgICAgICAgZWxzZToKICAgICAgICAgICAgICAgIHJhaXNlIFR5cGVFcnJvcigiVGhlIHBvcnRuYW1lICIgKyBzdHIocG9ydG5hbWUpICsgIiBpcyBub3QgYSBzdHJpbmcuIikKY2xhc3MgTEVEKF9TQURldmljZSk6CiAgICBkZWYgX19pbml0X18oc2VsZiwgcG9ydG5hbWUpOgogICAgICAgIHN1cGVyKExFRCwgc2VsZikuX19pbml0X18ocG9ydG5hbWUpCiAgICBkZWYgb24oc2VsZiwgYnJpZ2h0bmVzcyA9IDEwMCwgZHVyYXRpb24gPSAwLjApIC0+IE5vbmU6CiAgICAgICAgX2NoZWNrX251bShkdXJhdGlvbikKICAgICAgICBzZWxmLl9vbihfY2hlY2tfcGVyY2VudGFnZShicmlnaHRuZXNzKSwgZHVyYXRpb24pCiAgICBkZWYgX29uKHNlbGYsIGJyaWdodG5lc3MsIGR1cmF0aW9uID0gMC4wKToKICAgICAgICBpZiBkdXJhdGlvbiA8IDA6CiAgICAgICAgICAgIHJhaXNlIFZhbHVlRXJyb3IoIlRoZSBkdXJhdGlvbiB7fXMgaXMgbm90IHBvc2l0aXZlIG9yIHplcm8uIi5mb3JtYXQoZHVyYXRpb24pKQogICAgICAgIHNlbGYuX3BvcnQucHdtKGJyaWdodG5lc3MpCiAgICAgICAgaWYgZHVyYXRpb24gPiAwOgogICAgICAgICAgICBzbGVlcF9tcyhpbnQoMTAwMCpkdXJhdGlvbikpCiAgICAgICAgICAgIHNlbGYub2ZmKCkKICAgIGRlZiBibGluayhzZWxmLCBicmlnaHRuZXNzID0gMTAwLCBpbnRlcnZhbCA9IDEuMCwgcmVwZXRpdGlvbnMgPSAxLCkgLT4gTm9uZToKICAgICAgICBfY2hlY2tfbnVtKGludGVydmFsKQogICAgICAgIGlmIG5vdCBpc2luc3RhbmNlKHJlcGV0aXRpb25zLCBpbnQpOgogICAgICAgICAgICByYWlzZSBUeXBlRXJyb3IKICAgICAgICBicmlnaHRuZXNzID0gX2NoZWNrX3BlcmNlbnRhZ2UoYnJpZ2h0bmVzcykKICAgICAgICBpZiBpbnRlcnZhbCA8IDA6CiAgICAgICAgICAgIHJhaXNlIFZhbHVlRXJyb3IoIkludGVydmFsIGhhcyB0byBiZSBwb3NpdGl2ZSBvciB6ZXJvLiIpCiAgICAgICAgaWYgcmVwZXRpdGlvbnMgPCAwOgogICAgICAgICAgICByYWlzZSBWYWx1ZUVycm9yKCJSZXBldGl0aW9ucyBoYXZlIHRvIGJlIHBvc2l0aXZlIG9yIHplcm8uIikKICAgICAgICBpZiByZXBldGl0aW9ucyA9PSAwIG9yIGludGVydmFsID09IDA6CiAgICAgICAgICAgIHJldHVybgogICAgICAgIGZvciBfIGluIHJhbmdlKHJlcGV0aXRpb25zIC0gMSk6CiAgICAgICAgICAgIHNlbGYuX29uKGJyaWdodG5lc3MsIGludGVydmFsKQogICAgICAgICAgICBzbGVlcF9tcyhyb3VuZChpbnRlcnZhbCoxMDAwKSkKICAgICAgICBzZWxmLl9vbihicmlnaHRuZXNzLCBpbnRlcnZhbCkKICAgICAgICBzZWxmLm9mZigpCiAgICBkZWYgZmFkZShzZWxmLCBmcm9tX2JyaWdodG5lc3MgPSAxMDAsIHRvX2JyaWdodG5lc3MgPSAwLCBkdXJhdGlvbiA9IDEuMCkgLT4gTm9uZToKICAgICAgICBfY2hlY2tfbnVtKGR1cmF0aW9uKQogICAgICAgIGlmIGR1cmF0aW9uIDwgMDoKICAgICAgICAgICAgcmFpc2UgVmFsdWVFcnJvcigiRHVyYXRpb24gaGFzIHRvIGJlIHBvc2l0aXZlIG9yIHplcm8uIikKICAgICAgICBmcm9tX2JyaWdodG5lc3MgPSBfY2hlY2tfcGVyY2VudGFnZShmcm9tX2JyaWdodG5lc3MpCiAgICAgICAgdG9fYnJpZ2h0bmVzcyA9IF9jaGVja19wZXJjZW50YWdlKHRvX2JyaWdodG5lc3MpCiAgICAgICAgc3RlcHMgPSBhYnModG9fYnJpZ2h0bmVzcyAtIGZyb21fYnJpZ2h0bmVzcykKICAgICAgICBzdGVwX2R1cmF0aW9uID0gcm91bmQoZHVyYXRpb24qMTAwMC9zdGVwcykKICAgICAgICBmb3IgaSBpbiByYW5nZShmcm9tX2JyaWdodG5lc3MsIHRvX2JyaWdodG5lc3MsIC0xIGlmIHRvX2JyaWdodG5lc3MgPCBmcm9tX2JyaWdodG5lc3MgZWxzZSAxKToKICAgICAgICAgICAgc2VsZi5fb24oaSkKICAgICAgICAgICAgc2xlZXBfbXMoc3RlcF9kdXJhdGlvbikKICAgICAgICBzZWxmLl9vbih0b19icmlnaHRuZXNzKQogICAgZGVmIG9mZihzZWxmKSAtPiBOb25lOgogICAgICAgIHNlbGYuX3BvcnQucHdtKDAp';
@@ -348,6 +386,8 @@ async function onSendBrickobotikModule() {
   // 'ZGVmIHByaW50VmVyc2lvbigpOgogICAgcHJpbnQoJ0JyaWNrb2JvdGlrIFNwaWtlIFByaW1lIEFQSSBWZXJzaW9uIDAuMi4wJykKCmRlZiBncmVldCgpOgogICAgcHJpbnQoJ2hhbGxvIGJyaWNrb2JvdGlrJyk=';
 
   for (var chunk of modules_base64) {
+    currentTransferStep.value = currentTransferStep.value + 1;
+
     await writer.write(enc.encode("f.write(a2b_base64('" + chunk + "'))\n"));
 
     await delay(250);
@@ -401,6 +441,9 @@ async function onSendBrickobotikModule() {
 
   // await port.value.close();
 
+  isTransfering.value = false;
+  isConnected.value = false;
+
   console.log('done');
 
   // if ('serial' in navigator && 'forget' in nav.SerialPort.prototype) {
@@ -427,6 +470,10 @@ async function onSendBrickobotikModule() {
 .row {
   padding-top: 20px;
   border-top: 1px solid #e4e4e4;
+  display: flex;
+}
+
+.row-without-border {
   display: flex;
 }
 
